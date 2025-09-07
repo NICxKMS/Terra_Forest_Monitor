@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { LogIn, UserPlus, Building, Mail, Lock, User } from 'lucide-react';
-import { supabase } from '../utils/supabase/client';
+import { getSupabase } from '../utils/supabase/client';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 
 interface AuthModalProps {
@@ -34,6 +34,7 @@ export function AuthModal({ onAuth }: AuthModalProps) {
     setLoading(true);
     
     try {
+      const supabase = await getSupabase();
       const { data, error } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,

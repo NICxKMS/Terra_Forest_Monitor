@@ -1,5 +1,5 @@
 // Server-side Data Service - connects to Supabase Edge Functions API proxy
-import { supabase } from '../utils/supabase/client';
+import { getSupabase } from '../utils/supabase/client';
 import { CACHE_DURATIONS } from './apiConfig';
 import { apiConfigManager } from './apiConfigManager';
 
@@ -417,6 +417,7 @@ export class ServerSideDataService {
     try {
       console.log('🔄 Triggering server-side data refresh...');
       
+      const supabase = await getSupabase();
       const { data, error } = await supabase.functions.invoke('forest-data-webhook/full-sync');
       
       if (error) {

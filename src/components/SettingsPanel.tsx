@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { apiConfigManager } from '../services/apiConfigManager';
 import { toast } from 'sonner';
+import { enhancedForestDataService } from '../services/enhancedForestDataService';
+import { serverSideDataService } from '../services/serverSideDataService';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -87,8 +89,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       }
             // Clear caches so any previously cached mock data is removed immediately
             try {
-              const { enhancedForestDataService } = await import('../services/enhancedForestDataService');
-              const { serverSideDataService } = await import('../services/serverSideDataService');
               enhancedForestDataService.clearCache();
               serverSideDataService.clearCache();
             } catch {}

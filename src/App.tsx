@@ -29,7 +29,7 @@ import {
   User
 } from 'lucide-react';
 import { ImageWithFallback } from './components/figma/ImageWithFallback';
-import { supabase } from './utils/supabase/client';
+import { getSupabase } from './utils/supabase/client';
 import { enhancedForestDataService } from './services/enhancedForestDataService';
 import { apiConfigManager } from './services/apiConfigManager';
 
@@ -52,6 +52,7 @@ export default function App() {
     // Check for existing session
     const checkSession = async () => {
       try {
+        const supabase = await getSupabase();
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) {
           console.log('Session check error:', error);
@@ -72,17 +73,22 @@ export default function App() {
     checkApiStatus();
 
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          setUser(session.user);
-          fetchUserProfile(session.access_token);
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setUserProfile(null);
+    let authSubscription: any = null;
+    (async () => {
+      const supabase = await getSupabase();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (event === 'SIGNED_IN' && session?.user) {
+            setUser(session.user);
+            fetchUserProfile(session.access_token);
+          } else if (event === 'SIGNED_OUT') {
+            setUser(null);
+            setUserProfile(null);
+          }
         }
-      }
-    );
+      );
+      authSubscription = subscription;
+    })();
 
     // Listen for storage changes (API keys)
     const handleStorageChange = (e: StorageEvent) => {
@@ -109,7 +115,7 @@ export default function App() {
     window.addEventListener('switchToTab', handleSwitchToTab as EventListener);
 
     return () => {
-      subscription.unsubscribe();
+      authSubscription && authSubscription.unsubscribe && authSubscription.unsubscribe();
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('apiKeysRefreshed', handleApiKeysRefreshed as EventListener);
       window.removeEventListener('switchToTab', handleSwitchToTab as EventListener);
@@ -234,7 +240,7 @@ export default function App() {
     setUser(authenticatedUser);
     if (authenticatedUser) {
       // Get session to fetch user profile
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      getSupabase().then((supabase) => supabase.auth.getSession()).then(({ data: { session } }) => {
         if (session?.access_token) {
           fetchUserProfile(session.access_token);
         }
@@ -243,6 +249,7 @@ export default function App() {
   };
 
   const handleSignOut = async () => {
+    const supabase = await getSupabase();
     await supabase.auth.signOut();
     setUser(null);
     setUserProfile(null);

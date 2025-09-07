@@ -1,15 +1,20 @@
-import { createClient } from '@supabase/supabase-js';
 import { projectId, publicAnonKey } from './info';
 
-// Create a single Supabase client instance to be shared across the app
-// This prevents multiple GoTrueClient instances in the same browser context
-export const supabase = createClient(
-  `https://${projectId}.supabase.co`,
-  publicAnonKey,
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  }
-);
+let cachedSupabase: any | null = null;
+
+export async function getSupabase() {
+  if (cachedSupabase) return cachedSupabase;
+  const { createClient } = await import('@supabase/supabase-js');
+  const client = createClient(
+    `https://${projectId}.supabase.co`,
+    publicAnonKey,
+    {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    }
+  );
+  cachedSupabase = client;
+  return client;
+}

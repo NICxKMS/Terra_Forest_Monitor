@@ -12,14 +12,13 @@
       plugins: [react()],
       resolve: {
         extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
+        dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
         alias: {
-          'vaul@1.1.2': 'vaul',
           'sonner@2.0.3': 'sonner',
           'recharts@2.15.2': 'recharts',
           'react-resizable-panels@2.1.7': 'react-resizable-panels',
           'react-hook-form@7.55.0': 'react-hook-form',
           'react-day-picker@8.10.1': 'react-day-picker',
-          'next-themes@0.4.6': 'next-themes',
           'lucide-react@0.487.0': 'lucide-react',
           'input-otp@1.4.2': 'input-otp',
           'embla-carousel-react@8.6.0': 'embla-carousel-react',
@@ -57,12 +56,12 @@
       build: {
         target: 'esnext',
         outDir: 'build',
-        sourcemap: !isProd,
+        sourcemap: true,
         cssCodeSplit: true,
         minify: 'esbuild',
         manifest: true,
-        reportCompressedSize: false,
-        chunkSizeWarningLimit: 1000,
+        reportCompressedSize: true,
+        chunkSizeWarningLimit: 50,
         rollupOptions: {
           treeshake: {
             moduleSideEffects: false,
@@ -75,19 +74,49 @@
             chunkFileNames: 'assets/[name]-[hash].js',
             assetFileNames: 'assets/[name]-[hash][extname]',
             sourcemapExcludeSources: isProd,
+            experimentalMinChunkSize: 14000,
             manualChunks(id) {
-              if (id.includes('node_modules')) {
-                if (id.includes('react')) return 'react-vendor';
-                if (id.includes('@radix-ui') || id.includes('lucide-react')) return 'ui-vendor';
-                if (id.includes('recharts')) return 'charts-vendor';
-                if (id.includes('@supabase') || id.includes('supabase')) return 'supabase-vendor';
-                return 'vendor';
+              if (!id.includes('node_modules')) return;
+              const afterNodeModules = id.split('node_modules/')[1];
+              if (!afterNodeModules) return 'vendor';
+              const segments = afterNodeModules.split('/');
+              const isScoped = segments[0].startsWith('@');
+              const packageName = isScoped ? `${segments[0]}/${segments[1]}` : segments[0];
+              const largePackages = new Set([
+                'recharts',
+                '@supabase/auth-js',
+                'lodash',
+              ]);
+              if (largePackages.has(packageName)) {
+                const safe = packageName
+                  .replace('@', '')
+                  .replace(/[^a-zA-Z0-9_-]/g, '-')
+                  .toLowerCase();
+                return `pkg-${safe}`;
               }
+              const uiVendors = [
+                '@radix-ui',
+                'lucide-react',
+                'class-variance-authority',
+                'sonner',
+                'tailwind-merge',
+                'embla-carousel-react',
+                'react-day-picker',
+                'cmdk',
+                'input-otp',
+                'react-resizable-panels',
+                'floating-ui',
+              ];
+              const isUi = uiVendors.some((name) => packageName.startsWith(name));
+              return isUi ? 'vendor-ui' : 'vendor-core';
             },
           },
         },
         modulePreload: { polyfill: false },
         assetsInlineLimit: 4096,
+      },
+      optimizeDeps: {
+        include: ['react', 'react-dom', '@floating-ui/react-dom'],
       },
       esbuild: {
         drop: isProd ? ['console', 'debugger'] : [],
