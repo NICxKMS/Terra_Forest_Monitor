@@ -7,6 +7,9 @@ import { Alert, AlertDescription } from './ui/alert';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Satellite, Radio, Activity, AlertCircle, CheckCircle2, Clock, MapPin, Zap } from 'lucide-react';
 import { mockDataService } from '../services/mockDataService';
+import { enhancedForestDataService } from '../services/enhancedForestDataService';
+import { serverSideDataService } from '../services/serverSideDataService';
+import { apiConfigManager } from '../services/apiConfigManager';
 
 interface AlertData {
   id: string;
@@ -105,8 +108,10 @@ export function RealTimeMonitoring() {
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
-        // Use mock data service for reliable demo
-        const alertsData = mockDataService.getForestAlerts();
+        const liveOnly = apiConfigManager.isNoMockEnabled();
+        const alertsData = liveOnly
+          ? await enhancedForestDataService.getForestAlerts()
+          : mockDataService.getForestAlerts();
         
         // Transform alerts to match component interface
         const transformedAlerts: AlertData[] = alertsData.map(alert => ({
@@ -123,22 +128,29 @@ export function RealTimeMonitoring() {
         setAlerts(transformedAlerts);
       } catch (error) {
         console.log('Error fetching alerts:', error);
-        setAlerts(mockAlerts);
+        if (apiConfigManager.isNoMockEnabled()) setAlerts([]);
+        else setAlerts(mockAlerts);
       }
     };
 
     const fetchSatelliteData = async () => {
       try {
-        // Use mock data service for reliable demo
-        const satelliteDataResponse = mockDataService.getSatelliteData();
-        setSatelliteData({ 
-          feeds: satelliteFeeds, 
-          realTimeData,
-          currentData: satelliteDataResponse 
-        });
+        const liveOnly = apiConfigManager.isNoMockEnabled();
+        if (liveOnly) {
+          const currentData = await serverSideDataService.getSatelliteData(0, 0);
+          setSatelliteData({ feeds: [], realTimeData: [], currentData });
+        } else {
+          const satelliteDataResponse = mockDataService.getSatelliteData();
+          setSatelliteData({ 
+            feeds: satelliteFeeds, 
+            realTimeData,
+            currentData: satelliteDataResponse 
+          });
+        }
       } catch (error) {
         console.log('Error fetching satellite data:', error);
-        setSatelliteData({ feeds: satelliteFeeds, realTimeData });
+        if (apiConfigManager.isNoMockEnabled()) setSatelliteData({ feeds: [], realTimeData: [] });
+        else setSatelliteData({ feeds: satelliteFeeds, realTimeData });
       } finally {
         setLoading(false);
       }

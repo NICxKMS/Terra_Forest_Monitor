@@ -61,7 +61,9 @@ interface WeatherData {
 
 export class EnhancedForestDataService {
   private cache = new Map<string, { data: any; timestamp: number }>();
-
+  public clearCache(): void {
+    this.cache.clear();
+  }
   constructor() {
     // Refresh API configuration when service is created
     apiConfigManager.refreshApiKeys();
@@ -266,6 +268,10 @@ export class EnhancedForestDataService {
       this.setCachedData(cacheKey, sortedAlerts);
       return sortedAlerts;
     } catch (error) {
+      if (apiConfigManager.isNoMockEnabled()) {
+        console.error('Critical error loading forest alerts with no-mock enabled:', error);
+        return [];
+      }
       console.error('Critical error loading forest alerts, using fallback mock data:', error);
       return mockDataService.getForestAlerts();
     }
@@ -274,6 +280,10 @@ export class EnhancedForestDataService {
   // Get biodiversity data from GBIF
   public async getBiodiversityData(): Promise<BiodiversityData[]> {
     if (!this.shouldUseLiveData()) {
+      if (apiConfigManager.isNoMockEnabled()) {
+        console.log('No live biodiversity keys and no-mock enabled – returning empty');
+        return [];
+      }
       console.log('Using mock data for biodiversity (no API keys configured)');
       return mockDataService.getBiodiversityData();
     }
@@ -287,6 +297,10 @@ export class EnhancedForestDataService {
       const species = await this.getLiveBiodiversityData();
 
       if (species.length === 0) {
+        if (apiConfigManager.isNoMockEnabled()) {
+          console.log('No live biodiversity data, no-mock enabled – returning empty');
+          return [];
+        }
         console.log('No live biodiversity data available, using mock data');
         return mockDataService.getBiodiversityData();
       }
@@ -294,6 +308,10 @@ export class EnhancedForestDataService {
       this.setCachedData(cacheKey, species);
       return species;
     } catch (error) {
+      if (apiConfigManager.isNoMockEnabled()) {
+        console.error('Error fetching live biodiversity data (no-mock) – returning empty:', error);
+        return [];
+      }
       console.error('Error fetching live biodiversity data, falling back to mock data:', error);
       return mockDataService.getBiodiversityData();
     }
@@ -303,6 +321,9 @@ export class EnhancedForestDataService {
   public async getWeatherData(lat: number, lng: number): Promise<WeatherData> {
     const apiKey = apiConfigManager.getApiKey('openweather');
     if (!apiKey || apiKey === 'YOUR_OPENWEATHER_API_KEY_HERE') {
+      if (apiConfigManager.isNoMockEnabled()) {
+        throw new Error('OpenWeather API key not configured (no-mock enabled)');
+      }
       console.log('Using mock weather data (OpenWeather API key not configured)');
       return this.generateMockWeatherData(lat, lng);
     }
@@ -338,6 +359,9 @@ export class EnhancedForestDataService {
       return weatherData;
     } catch (error) {
       console.error('Error fetching live weather data:', error);
+      if (apiConfigManager.isNoMockEnabled()) {
+        throw error;
+      }
       console.log('Falling back to mock weather data');
       return this.generateMockWeatherData(lat, lng);
     }

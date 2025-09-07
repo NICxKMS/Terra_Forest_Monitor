@@ -9,6 +9,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Search, Filter, Camera, MapPin, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { mockDataService } from '../services/mockDataService';
+import { enhancedForestDataService } from '../services/enhancedForestDataService';
+import { apiConfigManager } from '../services/apiConfigManager';
 
 interface Species {
   id: string;
@@ -94,8 +96,10 @@ export function BiodiversityTracker() {
     const fetchSpeciesData = async () => {
       setLoading(true);
       try {
-        // Use mock data service for reliable demo
-        const biodiversityData = mockDataService.getBiodiversityData();
+        const liveOnly = apiConfigManager.isNoMockEnabled();
+        const biodiversityData = liveOnly
+          ? await enhancedForestDataService.getBiodiversityData()
+          : mockDataService.getBiodiversityData();
         
         // Convert to component interface with images
         const convertedSpecies: Species[] = biodiversityData.map((speciesData, index) => ({
@@ -114,7 +118,8 @@ export function BiodiversityTracker() {
         setSpecies(convertedSpecies);
       } catch (error) {
         console.log('Error fetching species data:', error);
-        setSpecies(mockSpecies);
+        if (apiConfigManager.isNoMockEnabled()) setSpecies([]);
+        else setSpecies(mockSpecies);
       } finally {
         setLoading(false);
       }

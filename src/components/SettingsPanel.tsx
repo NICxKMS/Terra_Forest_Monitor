@@ -85,6 +85,13 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       if (typeof window !== 'undefined') {
         (window as any).__FOREST_NO_MOCK__ = noMock ? 1 : 0;
       }
+            // Clear caches so any previously cached mock data is removed immediately
+            try {
+              const { enhancedForestDataService } = await import('../services/enhancedForestDataService');
+              const { serverSideDataService } = await import('../services/serverSideDataService');
+              enhancedForestDataService.clearCache();
+              serverSideDataService.clearCache();
+            } catch {}
       // Save settings to localStorage
       localStorage.setItem('forest-explorer-settings', JSON.stringify(settings));
       setSaveStatus('success');

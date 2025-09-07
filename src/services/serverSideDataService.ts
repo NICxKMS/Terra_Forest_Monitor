@@ -78,6 +78,10 @@ export class ServerSideDataService {
     console.log('💡 Deploy with: supabase functions deploy forest-api');
     console.log('💡 Deploy with: supabase functions deploy forest-data-webhook');
   }
+  public clearCache(): void {
+    this.cache.clear();
+  }
+
 
   // Health check for server-side API
   public async checkServerHealth(): Promise<{ success: boolean; details?: any; error?: string }> {
