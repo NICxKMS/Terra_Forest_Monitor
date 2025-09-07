@@ -1,0 +1,47 @@
+# Node modules
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vite cache
+.vite/
+
+# Mac system files
+.DS_Store
+
+# Supabase generated files
+.supabase/
+src/supabase/.temp/
+src/supabase/.output/
+
+# IDE/editor folders
+.vscode/
+.idea/
+
+# OS generated files
+Thumbs.db
+
+# Hash-based generated files (project convention)
+*_hash*
+*.[a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9]*
+
+# Misc
+*.log
+*.tmp
+*.swp
+*.swo
