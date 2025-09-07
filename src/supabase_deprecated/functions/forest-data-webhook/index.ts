@@ -1,9 +1,10 @@
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-nasa-api-key, x-openweather-api-key',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 }
 
@@ -20,6 +21,11 @@ interface WebhookEvent {
   data?: any
 }
 
+interface ClientApiKeys {
+  nasaApiKey?: string
+  openWeatherApiKey?: string
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -27,10 +33,17 @@ serve(async (req) => {
   }
 
   try {
-    const { pathname } = new URL(req.url)
+    const url = new URL(req.url)
+    const { pathname, searchParams } = url
     const path = pathname.replace('/functions/v1/forest-data-webhook', '')
     
     console.log(`Forest Data Webhook: ${req.method} ${path}`)
+
+    // Extract optional client-supplied API keys from headers or query params
+    const clientApiKeys: ClientApiKeys = {
+      nasaApiKey: req.headers.get('x-nasa-api-key') || searchParams.get('nasaKey') || searchParams.get('nasa_api_key') || undefined,
+      openWeatherApiKey: req.headers.get('x-openweather-api-key') || searchParams.get('owKey') || searchParams.get('openweatherKey') || searchParams.get('openweather_api_key') || undefined
+    }
 
     // Initialize Supabase client with service role for full access
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -38,7 +51,7 @@ serve(async (req) => {
     // Route handlers
     switch (path) {
       case '/scheduled-update':
-        return await handleScheduledUpdate(supabase)
+        return await handleScheduledUpdate(supabase, clientApiKeys)
         
       case '/fire-alert-webhook':
         return await handleFireAlertWebhook(req, supabase)
@@ -47,13 +60,18 @@ serve(async (req) => {
         return await handleDeforestationWebhook(req, supabase)
         
       case '/weather-update':
-        return await handleWeatherUpdate(supabase)
+        return await handleWeatherUpdate(supabase, clientApiKeys.openWeatherApiKey)
         
       case '/full-sync':
-        return await handleFullDataSync(supabase)
+        return await handleFullDataSync(supabase, clientApiKeys)
         
       case '/health':
-        return handleWebhookHealth()
+        return handleWebhookHealth({
+          requestKeys: {
+            nasa: Boolean(clientApiKeys.nasaApiKey),
+            openweather: Boolean(clientApiKeys.openWeatherApiKey)
+          }
+        })
         
       default:
         return new Response(
@@ -81,7 +99,7 @@ serve(async (req) => {
 })
 
 // Health check for webhook
-function handleWebhookHealth(): Response {
+function handleWebhookHealth(options?: { requestKeys?: { nasa: boolean; openweather: boolean } }): Response {
   const status = {
     success: true,
     service: 'forest-data-webhook',
@@ -94,8 +112,10 @@ function handleWebhookHealth(): Response {
       'data-caching'
     ],
     apis: {
-      nasa_firms: NASA_FIRMS_API_KEY !== 'YOUR_NASA_FIRMS_API_KEY_HERE',
-      openweather: OPENWEATHER_API_KEY !== 'YOUR_OPENWEATHER_API_KEY_HERE'
+      nasa_firms_env: NASA_FIRMS_API_KEY !== 'YOUR_NASA_FIRMS_API_KEY_HERE',
+      openweather_env: OPENWEATHER_API_KEY !== 'YOUR_OPENWEATHER_API_KEY_HERE',
+      nasa_firms_request: Boolean(options?.requestKeys?.nasa),
+      openweather_request: Boolean(options?.requestKeys?.openweather)
     }
   }
   
@@ -106,7 +126,7 @@ function handleWebhookHealth(): Response {
 }
 
 // Scheduled update handler (called by cron job)
-async function handleScheduledUpdate(supabase: any): Promise<Response> {
+async function handleScheduledUpdate(supabase: any, clientApiKeys?: ClientApiKeys): Promise<Response> {
   try {
     console.log('Starting scheduled forest data update...')
     
@@ -118,7 +138,7 @@ async function handleScheduledUpdate(supabase: any): Promise<Response> {
     // Update fire alerts every 15 minutes
     try {
       console.log('Updating fire alerts...')
-      const fireResults = await updateFireAlerts(supabase)
+      const fireResults = await updateFireAlerts(supabase, clientApiKeys?.nasaApiKey)
       updateResults.updates.push({
         type: 'fire-alerts',
         success: true,
@@ -161,7 +181,7 @@ async function handleScheduledUpdate(supabase: any): Promise<Response> {
     // Update weather data for key regions every 10 minutes
     try {
       console.log('Updating weather data...')
-      const weatherResults = await updateRegionalWeather(supabase)
+      const weatherResults = await updateRegionalWeather(supabase, clientApiKeys?.openWeatherApiKey)
       updateResults.updates.push({
         type: 'weather-data',
         success: true,
@@ -343,11 +363,11 @@ async function handleDeforestationWebhook(req: Request, supabase: any): Promise<
 }
 
 // Weather update handler
-async function handleWeatherUpdate(supabase: any): Promise<Response> {
+async function handleWeatherUpdate(supabase: any, openWeatherApiKey?: string): Promise<Response> {
   try {
     console.log('Starting weather data update...')
     
-    const weatherResults = await updateRegionalWeather(supabase)
+    const weatherResults = await updateRegionalWeather(supabase, openWeatherApiKey)
 
     return new Response(
       JSON.stringify({ 
@@ -375,7 +395,7 @@ async function handleWeatherUpdate(supabase: any): Promise<Response> {
 }
 
 // Full data sync handler
-async function handleFullDataSync(supabase: any): Promise<Response> {
+async function handleFullDataSync(supabase: any, clientApiKeys?: ClientApiKeys): Promise<Response> {
   try {
     console.log('Starting full data synchronization...')
     
@@ -386,9 +406,9 @@ async function handleFullDataSync(supabase: any): Promise<Response> {
 
     // Sync all data types
     const syncOperations = [
-      { name: 'fire-alerts', operation: () => updateFireAlerts(supabase) },
+      { name: 'fire-alerts', operation: () => updateFireAlerts(supabase, clientApiKeys?.nasaApiKey) },
       { name: 'deforestation-alerts', operation: () => updateDeforestationAlerts(supabase) },
-      { name: 'weather-data', operation: () => updateRegionalWeather(supabase) },
+      { name: 'weather-data', operation: () => updateRegionalWeather(supabase, clientApiKeys?.openWeatherApiKey) },
       { name: 'biodiversity-data', operation: () => updateBiodiversityData(supabase) },
       { name: 'forest-regions', operation: () => updateForestRegions(supabase) }
     ]
@@ -446,8 +466,9 @@ async function handleFullDataSync(supabase: any): Promise<Response> {
 }
 
 // Data update functions
-async function updateFireAlerts(supabase: any): Promise<{ count: number; source: string }> {
-  if (NASA_FIRMS_API_KEY === 'YOUR_NASA_FIRMS_API_KEY_HERE') {
+async function updateFireAlerts(supabase: any, nasaApiKey?: string): Promise<{ count: number; source: string }> {
+  const effectiveNasaKey = nasaApiKey || NASA_FIRMS_API_KEY
+  if (effectiveNasaKey === 'YOUR_NASA_FIRMS_API_KEY_HERE') {
     // Use mock data if no API key
     const mockAlerts = generateMockFireAlerts()
     
@@ -468,7 +489,7 @@ async function updateFireAlerts(supabase: any): Promise<{ count: number; source:
   try {
     // Fetch from NASA FIRMS API
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    const firmsUrl = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${NASA_FIRMS_API_KEY}/MODIS_NRT/world/1/${yesterday}`
+    const firmsUrl = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${effectiveNasaKey}/MODIS_NRT/world/1/${yesterday}`
     
     const response = await fetch(firmsUrl, {
       headers: {
@@ -547,7 +568,7 @@ async function updateDeforestationAlerts(supabase: any): Promise<{ count: number
   }
 }
 
-async function updateRegionalWeather(supabase: any): Promise<{ count: number; source: string }> {
+async function updateRegionalWeather(supabase: any, openWeatherApiKey?: string): Promise<{ count: number; source: string }> {
   const keyRegions = [
     { name: 'amazon', lat: -3.4653, lng: -62.2159 },
     { name: 'congo', lat: -0.228, lng: 15.8277 },
@@ -558,13 +579,15 @@ async function updateRegionalWeather(supabase: any): Promise<{ count: number; so
   let updatedCount = 0
   let source = 'mock-server'
 
+  const effectiveOpenWeatherKey = openWeatherApiKey || OPENWEATHER_API_KEY
+
   for (const region of keyRegions) {
     try {
       let weatherData
 
-      if (OPENWEATHER_API_KEY !== 'YOUR_OPENWEATHER_API_KEY_HERE') {
+      if (effectiveOpenWeatherKey !== 'YOUR_OPENWEATHER_API_KEY_HERE') {
         // Fetch live weather data
-        const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${region.lat}&lon=${region.lng}&appid=${OPENWEATHER_API_KEY}&units=metric`
+        const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${region.lat}&lon=${region.lng}&appid=${effectiveOpenWeatherKey}&units=metric`
         
         const response = await fetch(weatherUrl)
         if (response.ok) {

@@ -63,44 +63,9 @@ export function AuthModal({ onAuth }: AuthModalProps) {
     setLoading(true);
     
     try {
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/forest-api/signup`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-          name: formData.name,
-          organization: formData.organization
-        })
-      });
-      
-      if (response.ok) {
-        // Now sign in the user
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: formData.email,
-          password: formData.password,
-        });
-        
-        if (error) {
-          console.log('Auto sign in error:', error.message);
-          alert('Account created! Please sign in manually.');
-          setActiveTab('signin');
-          return;
-        }
-        
-        if (data.user) {
-          onAuth(data.user);
-          setIsOpen(false);
-          setFormData({ email: '', password: '', name: '', organization: '' });
-        }
-      } else {
-        const errorData = await response.json();
-        console.log('Sign up error:', errorData.error);
-        alert('Sign up failed: ' + (errorData.error || 'Unknown error'));
-      }
+      // Deprecated serverless signup removed; instruct user to sign in after account creation is enabled server-side
+      alert('Signup via server function is not available. Please contact admin or use existing credentials.');
+      setActiveTab('signin');
     } catch (error) {
       console.log('Sign up error:', error);
       alert('Sign up failed. Please try again.');

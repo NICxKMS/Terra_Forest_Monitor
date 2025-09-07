@@ -22,7 +22,7 @@ import {
   Wifi,
   WifiOff
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface ApiEndpoint {
   id: string;
@@ -54,6 +54,11 @@ export function ApiSetupGuide() {
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [apiKeys, setApiKeys] = useState<Record<string, ApiKey>>({});
+  const envHints = {
+    nasa_firms: (import.meta as any).env?.VITE_NASA_FIRMS_API_KEY ? 'provided by env' : undefined,
+    openweather: (import.meta as any).env?.VITE_OPENWEATHER_API_KEY ? 'provided by env' : undefined,
+    sentinel_hub: (import.meta as any).env?.VITE_SENTINEL_HUB_CLIENT_ID ? 'provided by env' : undefined,
+  } as const;
   const [apiStatuses, setApiStatuses] = useState<Record<string, ApiStatus>>({});
   const [unsavedChanges, setUnsavedChanges] = useState<Set<string>>(new Set());
 
@@ -213,38 +218,40 @@ export function ApiSetupGuide() {
     }));
 
     try {
+      const baseUrl = (typeof window !== 'undefined' && (window as any).__FOREST_WORKER_BASE__) || (import.meta as any).env?.VITE_FOREST_WORKER_BASE || 'https://forest.nicx.me/api';
       let testUrl = '';
-      let testOptions: RequestInit = { method: 'GET' };
 
       switch (apiId) {
         case 'openweather':
-          testUrl = `https://api.openweathermap.org/data/2.5/weather?q=London&appid=${apiKey.value}`;
+          testUrl = `${baseUrl}/weather?lat=51.5074&lng=-0.1278`; // London
           break;
         case 'nasa_firms':
-          testUrl = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${apiKey.value}/MODIS_NRT/world/1/2024-01-01`;
+          testUrl = `${baseUrl}/fire-alerts?region=world&days=1`;
           break;
         case 'nasa_gibs':
-          testUrl = 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi?SERVICE=WMTS&REQUEST=GetCapabilities';
+          testUrl = `${baseUrl}/satellite-data?lat=0&lng=0`;
           break;
         case 'global_forest_watch':
-          testUrl = 'https://production-api.globalforestwatch.org/v1/forest-change/umd-loss-gain?lat=0&lng=0';
+          testUrl = `${baseUrl}/deforestation-alerts?region=BRA`;
           break;
         case 'gbif':
-          testUrl = 'https://api.gbif.org/v1/occurrence/search?limit=1';
+          testUrl = `${baseUrl}/biodiversity?region=global&limit=1`;
           break;
         default:
           throw new Error('Test not implemented for this API');
       }
 
-      const response = await fetch(testUrl, testOptions);
-      const isConnected = response.ok || response.status === 401; // 401 might mean key is invalid but service is reachable
+      const response = await fetch(testUrl, { method: 'GET' });
+      const body = await response.json().catch(() => ({}));
+      const isConnected = response.ok && body?.success;
+      const detail = body?.source ? `Source: ${body.source}` : (body?.error || (response.ok ? 'Unknown' : `HTTP ${response.status}`));
 
       setApiStatuses(prev => ({
         ...prev,
         [apiId]: {
           testing: false,
           connected: isConnected,
-          error: isConnected ? undefined : `HTTP ${response.status}`,
+          error: isConnected ? detail : detail,
           lastTested: new Date().toISOString()
         }
       }));
@@ -254,13 +261,13 @@ export function ApiSetupGuide() {
           ...prev,
           [apiId]: {
             ...prev[apiId],
-            isValid: response.ok,
+            isValid: isConnected,
             lastTested: new Date().toISOString()
           }
         }));
       }
 
-      toast.success(isConnected ? `${endpoint.name} connected successfully` : `${endpoint.name} connection failed`);
+      toast.success(isConnected ? `${endpoint.name} reachable (${detail})` : `${endpoint.name} failed (${detail})`);
     } catch (error) {
       setApiStatuses(prev => ({
         ...prev,
@@ -433,7 +440,7 @@ export function ApiSetupGuide() {
                             onChange={(e) => updateApiKey(api.id, e.target.value)}
                             className="flex-1"
                           />
-                          {hasKey && (
+                          {(hasKey || envHints[api.id as keyof typeof envHints]) && (
                             <>
                               <Button
                                 variant="ghost"
@@ -454,6 +461,9 @@ export function ApiSetupGuide() {
                                 <Trash2 className="w-4 h-4 text-red-500" />
                               </Button>
                             </>
+                          )}
+                          {!hasKey && envHints[api.id as keyof typeof envHints] && (
+                            <span className="text-xs text-muted-foreground ml-2">{envHints[api.id as keyof typeof envHints]}</span>
                           )}
                         </div>
                         {apiKeys[api.id]?.lastTested && (

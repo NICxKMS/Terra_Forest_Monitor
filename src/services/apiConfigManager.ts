@@ -12,9 +12,11 @@ export class ApiConfigManager {
   private static instance: ApiConfigManager;
   private apiKeys: StoredApiKeys = {};
   private useLiveData: boolean = false;
+  private noMock: boolean = false;
 
   private constructor() {
     this.loadApiKeys();
+    this.loadNoMockFlag();
   }
 
   public static getInstance(): ApiConfigManager {
@@ -27,24 +29,40 @@ export class ApiConfigManager {
   private loadApiKeys(): void {
     try {
       const saved = localStorage.getItem('forest-explorer-api-keys');
-      if (saved) {
-        const parsedKeys = JSON.parse(saved);
-        this.apiKeys = {
-          nasa_firms: parsedKeys.nasa_firms?.value,
-          openweather: parsedKeys.openweather?.value,
-          sentinel_hub_client_id: parsedKeys.sentinel_hub?.value,
-          sentinel_hub_client_secret: parsedKeys.sentinel_hub_secret?.value
-        };
-        // Enable live data if any API keys are present
-        this.useLiveData = Object.values(this.apiKeys).some(key => key && key.length > 0);
-      }
+      const parsedKeys = saved ? JSON.parse(saved) : {};
+
+      // Read environment-provided keys (Vite)
+      const envKeys: StoredApiKeys = {
+        nasa_firms: (import.meta as any).env?.VITE_NASA_FIRMS_API_KEY,
+        openweather: (import.meta as any).env?.VITE_OPENWEATHER_API_KEY,
+        sentinel_hub_client_id: (import.meta as any).env?.VITE_SENTINEL_HUB_CLIENT_ID,
+        sentinel_hub_client_secret: (import.meta as any).env?.VITE_SENTINEL_HUB_CLIENT_SECRET,
+      };
+
+      this.apiKeys = {
+        nasa_firms: parsedKeys.nasa_firms?.value || envKeys.nasa_firms,
+        openweather: parsedKeys.openweather?.value || envKeys.openweather,
+        sentinel_hub_client_id: parsedKeys.sentinel_hub?.value || envKeys.sentinel_hub_client_id,
+        sentinel_hub_client_secret: parsedKeys.sentinel_hub_secret?.value || envKeys.sentinel_hub_client_secret,
+      };
+
+      // Enable live data if any API keys are present
+      this.useLiveData = Object.values(this.apiKeys).some(key => key && key.length > 0);
     } catch (error) {
       console.error('Error loading API keys:', error);
     }
   }
 
+  private loadNoMockFlag(): void {
+    try {
+      const saved = localStorage.getItem('forest-explorer-no-mock');
+      this.noMock = saved === '1' || saved === 'true';
+    } catch {}
+  }
+
   public refreshApiKeys(): void {
     this.loadApiKeys();
+    this.loadNoMockFlag();
   }
 
   public hasApiKey(service: keyof StoredApiKeys): boolean {
@@ -57,6 +75,17 @@ export class ApiConfigManager {
 
   public shouldUseLiveData(): boolean {
     return this.useLiveData && Object.values(this.apiKeys).some(key => key && key.length > 0);
+  }
+
+  public isNoMockEnabled(): boolean {
+    return this.noMock === true;
+  }
+
+  public setNoMock(enabled: boolean): void {
+    this.noMock = enabled;
+    try {
+      localStorage.setItem('forest-explorer-no-mock', enabled ? '1' : '0');
+    } catch {}
   }
 
   public getConfiguredApis(): string[] {
@@ -88,85 +117,42 @@ export class ApiConfigManager {
   // Test if an API endpoint is reachable
   public async testApiConnection(service: string): Promise<{ success: boolean; error?: string }> {
     try {
+      const baseUrl = (typeof window !== 'undefined' && (window as any).__FOREST_WORKER_BASE__) || (import.meta as any).env?.VITE_FOREST_WORKER_BASE || 'https://forest.nicx.me/api';
       switch (service) {
         case 'openweather': {
-          const apiKey = this.getApiKey('openweather');
-          if (!apiKey || apiKey === 'YOUR_OPENWEATHER_API_KEY_HERE') {
-            return { success: false, error: 'Valid API key required' };
-          }
-          const response = await fetch(
-            `https://api.openweathermap.org/data/2.5/weather?q=London&appid=${apiKey}`,
-            { mode: 'cors' }
-          );
-          if (response.status === 401) {
-            return { success: false, error: 'Invalid API key' };
-          }
-          return { success: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` };
+          // Proxy through worker to avoid CORS
+          const response = await fetch(`${baseUrl}/weather?lat=51.5074&lng=-0.1278`);
+          const body = await response.json().catch(() => ({}));
+          if (response.ok && body?.success) return { success: true };
+          return { success: false, error: `HTTP ${response.status}` };
         }
         
         case 'nasa_firms': {
-          const apiKey = this.getApiKey('nasa_firms');
-          if (!apiKey || apiKey === 'YOUR_NASA_FIRMS_API_KEY_HERE') {
-            return { success: false, error: 'Valid API key required' };
-          }
-          // Use a lighter endpoint for testing
-          const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-          const response = await fetch(
-            `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${apiKey}/MODIS_NRT/world/1/${yesterday}`,
-            { 
-              mode: 'cors',
-              headers: { 'Accept': 'text/csv' }
-            }
-          );
-          if (response.status === 403) {
-            return { success: false, error: 'Invalid API key or access denied' };
-          }
-          return { success: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` };
+          const response = await fetch(`${baseUrl}/fire-alerts?region=world&days=1`);
+          const body = await response.json().catch(() => ({}));
+          if (response.ok && body?.success) return { success: true };
+          return { success: false, error: `HTTP ${response.status}` };
         }
         
         case 'nasa_gibs': {
-          // NASA GIBS doesn't require an API key
-          const response = await fetch(
-            'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi?SERVICE=WMTS&REQUEST=GetCapabilities',
-            { 
-              mode: 'cors',
-              headers: { 'Accept': 'application/xml' }
-            }
-          );
-          return { success: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` };
+          const response = await fetch(`${baseUrl}/satellite-data?lat=0&lng=0`);
+          const body = await response.json().catch(() => ({}));
+          if (response.ok && body?.success) return { success: true };
+          return { success: false, error: `HTTP ${response.status}` };
         }
         
         case 'global_forest_watch': {
-          // Note: This API may have CORS restrictions in browsers
-          try {
-            const response = await fetch(
-              'https://production-api.globalforestwatch.org/v1/forest-change/umd-loss-gain?lat=0&lng=0',
-              { 
-                mode: 'cors',
-                headers: { 'Accept': 'application/json' }
-              }
-            );
-            if (response.status === 400) {
-              // 400 is expected for invalid coordinates, but means API is reachable
-              return { success: true, error: undefined };
-            }
-            return { success: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` };
-          } catch (corsError) {
-            // CORS error means API exists but has restrictions
-            return { success: true, error: 'CORS restricted (API accessible via server)' };
-          }
+          const response = await fetch(`${baseUrl}/deforestation-alerts?region=BRA`);
+          const body = await response.json().catch(() => ({}));
+          if (response.ok && body?.success) return { success: true };
+          return { success: false, error: `HTTP ${response.status}` };
         }
         
         case 'gbif': {
-          // GBIF is generally CORS-friendly
-          const response = await fetch(
-            'https://api.gbif.org/v1/occurrence/search?limit=1',
-            { 
-              mode: 'cors',
-              headers: { 'Accept': 'application/json' }
-            }
-          );
-          return { success: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` };
+          const response = await fetch(`${baseUrl}/biodiversity?region=global&limit=1`);
+          const body = await response.json().catch(() => ({}));
+          if (response.ok && body?.success) return { success: true };
+          return { success: false, error: `HTTP ${response.status}` };
         }
         
         default:

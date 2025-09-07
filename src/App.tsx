@@ -123,11 +123,11 @@ export default function App() {
         setTimeout(() => reject(new Error('Profile fetch timeout')), 3000);
       });
 
-      const profilePromise = supabase.functions.invoke('forest-api/user-profile', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        }
-      });
+      const baseUrl = (typeof window !== 'undefined' && (window as any).__FOREST_WORKER_BASE__) || (import.meta as any).env?.VITE_FOREST_WORKER_BASE || 'https://forest.nicx.me/api';
+      const profilePromise = fetch(`${baseUrl}/user-profile`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }).then(r => r.json());
       
       const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
       

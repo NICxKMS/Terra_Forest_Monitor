@@ -1,0 +1,16 @@
+name = "global-forest-explorer"
+main = "cloudflare/worker.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+# Set these in your Cloudflare dashboard or via wrangler secret
+NASA_FIRMS_API_KEY = "92843b72cc0f5aebaebfa094375a942f"
+OPENWEATHER_API_KEY = "adc3e6677b02a5fe0ecaec69fff1e7de"
+
+[[routes]]
+pattern = "forest.nicx.me/api/*"
+zone_id = "9241a90d5c60fb37ca0fe765b8c8a0d2"
+
+
+[observability]
+enabled = true

@@ -1,6 +1,7 @@
 // Server-side Data Service - connects to Supabase Edge Functions API proxy
 import { supabase } from '../utils/supabase/client';
 import { CACHE_DURATIONS } from './apiConfig';
+import { apiConfigManager } from './apiConfigManager';
 
 interface ServerApiResponse {
   success: boolean;
@@ -69,7 +70,7 @@ interface WeatherData {
 
 export class ServerSideDataService {
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private baseUrl = '/functions/v1/forest-api';
+  private baseUrl = (typeof window !== 'undefined' && (window as any).__FOREST_WORKER_BASE__) || (import.meta as any).env?.VITE_FOREST_WORKER_BASE || 'https://forest.nicx.me/api';
 
   constructor() {
     console.log('🚀 Server-side data service initialized');
@@ -86,7 +87,7 @@ export class ServerSideDataService {
         setTimeout(() => reject(new Error('Health check timeout')), 5000);
       });
 
-      const healthPromise = supabase.functions.invoke('forest-api/health');
+      const healthPromise = fetch(`${this.baseUrl}/health`).then(r => r.json()).then((data) => ({ data, error: null }));
       
       const { data, error } = await Promise.race([healthPromise, timeoutPromise]) as any;
       
@@ -94,10 +95,10 @@ export class ServerSideDataService {
         throw new Error(error.message);
       }
 
-      console.log('🟢 Server-side API health check passed:', data);
+      console.log('🟢 Server health:', data);
       return { success: true, details: data };
-    } catch (error) {
-      console.log('ℹ️ Server-side API not available (Edge Functions not deployed):', error.message);
+    } catch (err) {
+      console.log('ℹ️ Server health check failed:', (err as any)?.message);
       return { 
         success: false, 
         error: 'Edge Functions not deployed or accessible',
@@ -119,22 +120,15 @@ export class ServerSideDataService {
     }
 
     try {
-      console.log('🌍 Fetching forest regions from server-side API...');
+      console.log('🌍 Fetching forest regions via Worker...');
       
       // Add timeout for Edge Function calls
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Request timeout')), 10000);
       });
 
-      const requestPromise = supabase.functions.invoke('forest-api/forest-regions');
-      
-      const { data, error } = await Promise.race([requestPromise, timeoutPromise]) as any;
-      
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      const response: ServerApiResponse = data;
+      const requestPromise = fetch(`${this.baseUrl}/forest-regions${apiConfigManager.isNoMockEnabled() ? '?no_mock=1' : ''}`).then(r => r.json());
+      const response: ServerApiResponse = await Promise.race([requestPromise, timeoutPromise]) as any;
       
       if (!response.success) {
         throw new Error(response.error || 'Server API error');
@@ -144,9 +138,11 @@ export class ServerSideDataService {
       this.setCachedData(cacheKey, response.data, CACHE_DURATIONS.FOREST_DATA);
       return response.data;
       
-    } catch (error) {
-      console.log('ℹ️ Server-side API not available, using mock data:', error.message);
-      // Return mock data as fallback
+    } catch (err) {
+      if (apiConfigManager.isNoMockEnabled()) {
+        throw err;
+      }
+      console.log('ℹ️ Forest regions endpoint failed, using mock data:', (err as any)?.message);
       return this.getMockForestRegions();
     }
   }
@@ -161,7 +157,7 @@ export class ServerSideDataService {
     }
 
     try {
-      console.log('🔥 Fetching forest alerts from server-side API...');
+      console.log('🔥 Fetching forest alerts via Worker...');
       
       // Add timeout for Edge Function calls
       const createTimeoutPromise = (ms: number) => new Promise((_, reject) => {
@@ -170,17 +166,13 @@ export class ServerSideDataService {
 
       // Fetch fire alerts with timeout
       const firePromise = Promise.race([
-        supabase.functions.invoke('forest-api/fire-alerts', {
-          body: { region: 'world', days: '1' }
-        }),
+        fetch(`${this.baseUrl}/fire-alerts?region=world&days=1${apiConfigManager.isNoMockEnabled() ? '&no_mock=1' : ''}`).then(r => r.json()),
         createTimeoutPromise(8000)
       ]);
 
       // Fetch deforestation alerts with timeout
       const deforestationPromise = Promise.race([
-        supabase.functions.invoke('forest-api/deforestation-alerts', {
-          body: { region: 'BRA' }
-        }),
+        fetch(`${this.baseUrl}/deforestation-alerts?region=BRA${apiConfigManager.isNoMockEnabled() ? '&no_mock=1' : ''}`).then(r => r.json()),
         createTimeoutPromise(8000)
       ]);
 
@@ -193,35 +185,43 @@ export class ServerSideDataService {
 
       // Process fire alerts
       if (fireResult.status === 'fulfilled' && !fireResult.value.error) {
-        const fireResponse: ServerApiResponse = fireResult.value.data;
+        const fireResponse: ServerApiResponse = fireResult.value;
         if (fireResponse && fireResponse.success && fireResponse.data) {
           alerts.push(...fireResponse.data);
           console.log(`🔥 Loaded ${fireResponse.data.length} fire alerts from ${fireResponse.source}`);
         }
       } else {
-        console.log('ℹ️ Fire alerts from server not available, using mock data');
+        const msg = fireResult.status === 'rejected' ? (fireResult.reason?.message || 'request failed') : fireResult.value?.error || 'unknown error';
+        console.log('ℹ️ Fire alerts endpoint failed, using mock data:', msg);
       }
 
       // Process deforestation alerts
       if (deforestationResult.status === 'fulfilled' && !deforestationResult.value.error) {
-        const deforestationResponse: ServerApiResponse = deforestationResult.value.data;
+        const deforestationResponse: ServerApiResponse = deforestationResult.value;
         if (deforestationResponse && deforestationResponse.success && deforestationResponse.data) {
           alerts.push(...deforestationResponse.data);
           console.log(`🌳 Loaded ${deforestationResponse.data.length} deforestation alerts from ${deforestationResponse.source}`);
         }
       } else {
-        console.log('ℹ️ Deforestation alerts from server not available, using mock data');
+        const msg = deforestationResult.status === 'rejected' ? (deforestationResult.reason?.message || 'request failed') : deforestationResult.value?.error || 'unknown error';
+        console.log('ℹ️ Deforestation alerts endpoint failed, using mock data:', msg);
       }
 
       // If no server data available, use mock data
       if (alerts.length === 0) {
-        console.log('ℹ️ Server-side API not available, using comprehensive mock data');
+        if (apiConfigManager.isNoMockEnabled()) {
+          console.log('ℹ️ No server alerts available (no-mock on). Returning empty list.');
+          return [];
+        }
+        console.log('ℹ️ No server alerts available, using comprehensive mock data');
         return this.getMockForestAlerts();
       }
 
       // Add mock biodiversity alerts for demonstration
-      const biodiversityAlerts = this.getMockBiodiversityAlerts();
-      alerts.push(...biodiversityAlerts);
+      if (!apiConfigManager.isNoMockEnabled()) {
+        const biodiversityAlerts = this.getMockBiodiversityAlerts();
+        alerts.push(...biodiversityAlerts);
+      }
 
       // Sort by timestamp and limit results
       const sortedAlerts = alerts
@@ -232,10 +232,46 @@ export class ServerSideDataService {
       this.setCachedData(cacheKey, sortedAlerts, CACHE_DURATIONS.FIRE_DATA);
       return sortedAlerts;
       
-    } catch (error) {
-      console.log('ℹ️ Server-side API not available, using mock data:', error.message);
+    } catch (err) {
+      if (apiConfigManager.isNoMockEnabled()) {
+        throw err;
+      }
+      console.log('ℹ️ Alerts workflow failed, using mock data:', (err as any)?.message);
       // Return mock data as fallback
       return this.getMockForestAlerts();
+    }
+  }
+
+  // Get deforestation alerts only (via Worker)
+  public async getDeforestationAlerts(region: string = 'BRA', days: number = 90, limit: number = 50): Promise<ForestAlert[]> {
+    const cacheKey = `deforestation_server_${region}_${days}_${limit}`;
+    const cached = this.getCachedData(cacheKey, CACHE_DURATIONS.FIRE_DATA);
+    if (cached) {
+      console.log('📦 Using cached deforestation alerts data');
+      return cached;
+    }
+
+    try {
+      console.log(`🌳 Fetching deforestation alerts via Worker for region ${region} (last ${days} days, limit ${limit})...`);
+
+      const r = await fetch(`${this.baseUrl}/deforestation-alerts?region=${encodeURIComponent(region)}&days=${days}&limit=${limit}${apiConfigManager.isNoMockEnabled() ? '&no_mock=1' : ''}`);
+      const data = await r.json();
+
+      const response: ServerApiResponse = data;
+
+      if (!response.success) {
+        throw new Error(response.error || 'Server API error');
+      }
+
+      console.log(`🌳 Loaded ${response.data.length} deforestation alerts from ${response.source}`);
+      this.setCachedData(cacheKey, response.data, CACHE_DURATIONS.FIRE_DATA);
+      return response.data;
+    } catch (err) {
+      if (apiConfigManager.isNoMockEnabled()) {
+        throw err;
+      }
+      console.log('ℹ️ Deforestation alerts endpoint failed, using mock data:', (err as any)?.message);
+      return this.getMockDeforestationAlerts();
     }
   }
 
@@ -251,13 +287,8 @@ export class ServerSideDataService {
     try {
       console.log('🦎 Fetching biodiversity data from server-side API...');
       
-      const { data, error } = await supabase.functions.invoke('forest-api/biodiversity', {
-        body: { region: 'global', limit: '20' }
-      });
-      
-      if (error) {
-        throw new Error(error.message);
-      }
+      const r = await fetch(`${this.baseUrl}/biodiversity?region=global&limit=20${apiConfigManager.isNoMockEnabled() ? '&no_mock=1' : ''}`);
+      const data = await r.json();
 
       const response: ServerApiResponse = data;
       
@@ -269,9 +300,11 @@ export class ServerSideDataService {
       this.setCachedData(cacheKey, response.data, CACHE_DURATIONS.SPECIES_DATA);
       return response.data;
       
-    } catch (error) {
-      console.error('❌ Error fetching biodiversity data from server:', error);
-      // Return mock data as fallback
+    } catch (err) {
+      console.error('❌ Error fetching biodiversity data from server:', err);
+      if (apiConfigManager.isNoMockEnabled()) {
+        throw err;
+      }
       return this.getMockBiodiversityData();
     }
   }
@@ -288,13 +321,8 @@ export class ServerSideDataService {
     try {
       console.log(`🌤️ Fetching weather data for ${lat}, ${lng} from server-side API...`);
       
-      const { data, error } = await supabase.functions.invoke('forest-api/weather', {
-        body: { lat: lat.toString(), lng: lng.toString() }
-      });
-      
-      if (error) {
-        throw new Error(error.message);
-      }
+      const r = await fetch(`${this.baseUrl}/weather?lat=${lat}&lng=${lng}${apiConfigManager.isNoMockEnabled() ? '&no_mock=1' : ''}`);
+      const data = await r.json();
 
       const response: ServerApiResponse = data;
       
@@ -306,9 +334,11 @@ export class ServerSideDataService {
       this.setCachedData(cacheKey, response.data, CACHE_DURATIONS.WEATHER_DATA);
       return response.data;
       
-    } catch (error) {
-      console.error(`❌ Error fetching weather data for ${lat}, ${lng}:`, error);
-      // Return mock data as fallback
+    } catch (err) {
+      console.error(`❌ Error fetching weather data for ${lat}, ${lng}:`, err);
+      if (apiConfigManager.isNoMockEnabled()) {
+        throw err;
+      }
       return this.generateMockWeatherData(lat, lng);
     }
   }
@@ -318,17 +348,8 @@ export class ServerSideDataService {
     try {
       console.log(`🛰️ Fetching satellite data for ${lat}, ${lng}...`);
       
-      const { data, error } = await supabase.functions.invoke('forest-api/satellite-data', {
-        body: { 
-          lat: lat.toString(), 
-          lng: lng.toString(),
-          layer: layer || 'MODIS_Terra_CorrectedReflectance_TrueColor'
-        }
-      });
-      
-      if (error) {
-        throw new Error(error.message);
-      }
+      const r = await fetch(`${this.baseUrl}/satellite-data?lat=${lat}&lng=${lng}&layer=${encodeURIComponent(layer || 'MODIS_Terra_CorrectedReflectance_TrueColor')}${apiConfigManager.isNoMockEnabled() ? '&no_mock=1' : ''}`);
+      const data = await r.json();
 
       const response: ServerApiResponse = data;
       
@@ -339,9 +360,9 @@ export class ServerSideDataService {
       console.log(`✅ Satellite data loaded from ${response.source}`);
       return response.data;
       
-    } catch (error) {
-      console.error(`❌ Error fetching satellite data for ${lat}, ${lng}:`, error);
-      throw error;
+    } catch (err) {
+      console.error(`❌ Error fetching satellite data for ${lat}, ${lng}:`, err);
+      throw err;
     }
   }
 
@@ -358,7 +379,7 @@ export class ServerSideDataService {
       console.log(`📈 Generating historical data for ${region} (${startYear}-${endYear})...`);
       
       // Generate comprehensive historical data
-      const data = []
+      const data: any[] = []
       
       for (let year = startYear; year <= endYear; year++) {
         const yearData = {
@@ -381,9 +402,9 @@ export class ServerSideDataService {
       this.setCachedData(cacheKey, data, CACHE_DURATIONS.FOREST_DATA);
       return data;
       
-    } catch (error) {
-      console.error(`❌ Error generating historical data for ${region}:`, error);
-      throw error;
+    } catch (err) {
+      console.error(`❌ Error generating historical data for ${region}:`, err);
+      throw err;
     }
   }
 
@@ -547,6 +568,31 @@ export class ServerSideDataService {
         confidence: 85,
         description: 'Endangered species habitat disruption detected',
         coordinates: { lat: 0.5, lng: 101.5 }
+      }
+    ];
+  }
+
+  private getMockDeforestationAlerts(): ForestAlert[] {
+    return [
+      {
+        id: 'deforest_server_mock_1',
+        timestamp: new Date(Date.now() - 7200000).toISOString(),
+        location: 'Congo Basin, DRC',
+        type: 'deforestation',
+        severity: 'high',
+        confidence: 78,
+        description: 'Deforestation alert detected by GLAD system',
+        coordinates: { lat: -0.3, lng: 15.9 }
+      },
+      {
+        id: 'deforest_server_mock_2',
+        timestamp: new Date(Date.now() - 10800000).toISOString(),
+        location: 'Brazilian Amazon',
+        type: 'deforestation',
+        severity: 'critical',
+        confidence: 89,
+        description: 'Large-scale clearing detected via satellite imagery',
+        coordinates: { lat: -4.1, lng: -63.2 }
       }
     ];
   }

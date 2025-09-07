@@ -24,7 +24,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { apiConfigManager } from '../services/apiConfigManager';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -55,10 +55,14 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [apiStatuses, setApiStatuses] = useState<Record<string, any>>({});
   const [isRefreshingApis, setIsRefreshingApis] = useState(false);
+  const [noMock, setNoMock] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen) {
       loadApiStatuses();
+      try {
+        setNoMock(apiConfigManager.isNoMockEnabled());
+      } catch {}
     }
   }, [isOpen]);
 
@@ -77,6 +81,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      apiConfigManager.setNoMock(noMock);
+      if (typeof window !== 'undefined') {
+        (window as any).__FOREST_NO_MOCK__ = noMock ? 1 : 0;
+      }
       // Save settings to localStorage
       localStorage.setItem('forest-explorer-settings', JSON.stringify(settings));
       setSaveStatus('success');
@@ -311,6 +319,18 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                         onCheckedChange={(checked) => 
                           handleSettingChange('display', 'showSatelliteLayer', checked)
                         }
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="no-mock">Real data only</Label>
+                        <p className="text-sm text-muted-foreground">Disable all mock fallbacks</p>
+                      </div>
+                      <Switch
+                        id="no-mock"
+                        checked={noMock}
+                        onCheckedChange={(checked) => setNoMock(Boolean(checked))}
                       />
                     </div>
 

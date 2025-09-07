@@ -170,41 +170,44 @@ export class EnhancedForestDataService {
 
   // Get forest alerts with live data integration
   public async getForestAlerts(): Promise<ForestAlert[]> {
-    // Try server-side API first with quick timeout
-    try {
-      const healthPromise = serverSideDataService.checkServerHealth();
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Quick health check timeout')), 1000);
-      });
+    // Prefer direct browser NASA FIRMS if a user key exists
+    const hasNasaKeyDirect = apiConfigManager.hasApiKey('nasa_firms');
+    if (!hasNasaKeyDirect) {
+      // No user NASA key: try server first (it proxies FIRMS + GFW)
+      try {
+        const healthPromise = serverSideDataService.checkServerHealth();
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Quick health check timeout')), 1000);
+        });
 
-      const serverHealth = await Promise.race([healthPromise, timeoutPromise]) as any;
-      
-      if (serverHealth.success) {
-        console.log('🔥 Using server-side API for forest alerts');
-        return await serverSideDataService.getForestAlerts();
+        const serverHealth = await Promise.race([healthPromise, timeoutPromise]) as any;
+        
+        if (serverHealth.success) {
+          console.log('🔥 Using server-side API for forest alerts');
+          return await serverSideDataService.getForestAlerts();
+        }
+      } catch (error) {
+        console.log('ℹ️ Server-side API not available, using enhanced browser service');
       }
-    } catch (error) {
-      console.log('ℹ️ Server-side API not available, using enhanced browser service');
+    } else {
+      console.log('🔥 NASA FIRMS key detected – using direct browser calls for fire alerts');
     }
 
     // Fallback to browser-based service
     const cacheKey = 'forest_alerts_combined';
-    const cached = this.getCachedData(cacheKey, CACHE_DURATIONS.FIRE_DATA);
+    const cached = this.getCachedData(cacheKey);
     if (cached) return cached;
 
     console.log('Loading forest alerts from browser service...');
     
     // Check if we're in a browser environment with CORS limitations
     const isBrowser = typeof window !== 'undefined';
-    const hasNasaKey = apiConfigManager.hasApiKey('nasa_firms');
     
-    // Smart detection: don't attempt CORS-blocked APIs in browsers
-    const shouldAttemptNasaFirms = hasNasaKey && !isBrowser;
-    const shouldAttemptGFW = !isBrowser; // Global Forest Watch typically blocks browser requests too
-    
+    // Strategy: Browser → use Worker for GFW; Server → direct GFW
+    const shouldAttemptNasaFirms = hasNasaKeyDirect;
     console.log(`Environment: ${isBrowser ? 'Browser' : 'Server'}`);
-    console.log(`NASA FIRMS: ${shouldAttemptNasaFirms ? 'Will attempt' : 'Using mock (browser CORS limitation)'}`);
-    console.log(`Global Forest Watch: ${shouldAttemptGFW ? 'Will attempt' : 'Using mock (browser CORS limitation)'}`);
+    console.log(`NASA FIRMS: ${shouldAttemptNasaFirms ? 'Will attempt' : 'No key, using mock'}`);
+    console.log(`Global Forest Watch: ${isBrowser ? 'Using Worker' : 'Direct server call'}`);
 
     try {
       const alerts: ForestAlert[] = [];
@@ -216,32 +219,43 @@ export class EnhancedForestDataService {
           alerts.push(...fireAlerts);
           console.log(`✓ Loaded ${fireAlerts.length} live fire alerts from NASA FIRMS`);
         } catch (error) {
-          console.log('NASA FIRMS failed, using mock fire alerts:', error.message);
+          if (apiConfigManager.isNoMockEnabled()) throw error;
+          console.log('NASA FIRMS failed, using mock fire alerts:', (error as any)?.message || error);
           alerts.push(...this.getMockFireAlerts());
         }
       } else {
-        console.log('→ Using mock fire alerts (browser environment or no API key)');
-        alerts.push(...this.getMockFireAlerts());
+        if (apiConfigManager.isNoMockEnabled()) {
+          console.log('→ Skipping fire alerts (no API key, no-mock enabled)');
+        } else {
+          console.log('→ Using mock fire alerts (no API key)');
+          alerts.push(...this.getMockFireAlerts());
+        }
       }
 
-      // Deforestation alerts - use live data only if not in browser
-      if (shouldAttemptGFW) {
-        try {
+      // Deforestation alerts
+      try {
+        if (isBrowser) {
+          // Browser calls Worker to bypass CORS; use rolling 90-day window
+          const deforestationAlerts = await serverSideDataService.getDeforestationAlerts('BRA', 90, 50);
+          alerts.push(...deforestationAlerts);
+          console.log(`✓ Loaded ${deforestationAlerts.length} deforestation alerts via Worker (GFW)`);
+        } else {
+          // Server-side can call GFW directly
           const deforestationAlerts = await this.getLiveDeforestationAlerts();
           alerts.push(...deforestationAlerts);
           console.log(`✓ Loaded ${deforestationAlerts.length} live deforestation alerts from Global Forest Watch`);
-        } catch (error) {
-          console.log('Global Forest Watch failed, using mock deforestation alerts:', error.message);
-          alerts.push(...this.getMockDeforestationAlerts());
         }
-      } else {
-        console.log('→ Using mock deforestation alerts (browser environment)');
+      } catch (error) {
+        if (apiConfigManager.isNoMockEnabled()) throw error;
+        console.log('Global Forest Watch failed, using mock deforestation alerts:', (error as any)?.message || error);
         alerts.push(...this.getMockDeforestationAlerts());
       }
 
       // Always add some biodiversity alerts from mock data for demonstration
-      const biodiversityAlerts = this.getMockBiodiversityAlerts();
-      alerts.push(...biodiversityAlerts);
+      if (!apiConfigManager.isNoMockEnabled()) {
+        const biodiversityAlerts = this.getMockBiodiversityAlerts();
+        alerts.push(...biodiversityAlerts);
+      }
 
       // Sort by timestamp and limit results
       const sortedAlerts = alerts
@@ -249,7 +263,7 @@ export class EnhancedForestDataService {
         .slice(0, 25);
 
       console.log(`✓ Successfully loaded ${sortedAlerts.length} total forest alerts`);
-      this.setCachedData(cacheKey, sortedAlerts, CACHE_DURATIONS.FIRE_DATA);
+      this.setCachedData(cacheKey, sortedAlerts);
       return sortedAlerts;
     } catch (error) {
       console.error('Critical error loading forest alerts, using fallback mock data:', error);
@@ -265,7 +279,7 @@ export class EnhancedForestDataService {
     }
 
     const cacheKey = 'biodiversity_live';
-    const cached = this.getCachedData(cacheKey, CACHE_DURATIONS.SPECIES_DATA);
+    const cached = this.getCachedData(cacheKey);
     if (cached) return cached;
 
     try {
@@ -277,7 +291,7 @@ export class EnhancedForestDataService {
         return mockDataService.getBiodiversityData();
       }
 
-      this.setCachedData(cacheKey, species, CACHE_DURATIONS.SPECIES_DATA);
+      this.setCachedData(cacheKey, species);
       return species;
     } catch (error) {
       console.error('Error fetching live biodiversity data, falling back to mock data:', error);
@@ -294,7 +308,7 @@ export class EnhancedForestDataService {
     }
 
     const cacheKey = `weather_live_${lat.toFixed(2)}_${lng.toFixed(2)}`;
-    const cached = this.getCachedData(cacheKey, CACHE_DURATIONS.WEATHER_DATA);
+    const cached = this.getCachedData(cacheKey);
     if (cached) return cached;
 
     try {
@@ -320,7 +334,7 @@ export class EnhancedForestDataService {
       const data = await response.json();
       const weatherData = this.parseOpenWeatherData(data);
       
-      this.setCachedData(cacheKey, weatherData, CACHE_DURATIONS.WEATHER_DATA);
+      this.setCachedData(cacheKey, weatherData);
       return weatherData;
     } catch (error) {
       console.error('Error fetching live weather data:', error);
@@ -333,7 +347,8 @@ export class EnhancedForestDataService {
   public async getHistoricalData(region: string, startYear: number, endYear: number): Promise<any[]> {
     if (!this.shouldUseLiveData()) {
       console.log('Using mock historical data (no API keys configured)');
-      return mockDataService.getHistoricalData(region, startYear, endYear);
+      const years = Math.max(0, endYear - startYear);
+      return mockDataService.getHistoricalData(region, years);
     }
 
     const cacheKey = `historical_live_${region}_${startYear}_${endYear}`;
@@ -349,7 +364,8 @@ export class EnhancedForestDataService {
       return data;
     } catch (error) {
       console.error('Error fetching live historical data, falling back to mock data:', error);
-      return mockDataService.getHistoricalData(region, startYear, endYear);
+      const years = Math.max(0, endYear - startYear);
+      return mockDataService.getHistoricalData(region, years);
     }
   }
 
@@ -399,45 +415,20 @@ export class EnhancedForestDataService {
       throw new Error('NASA FIRMS API key not configured');
     }
 
-    // Check if we're in a browser environment
-    if (typeof window !== 'undefined') {
-      throw new Error('NASA FIRMS API requires server-side access (CORS limitation)');
-    }
-
     try {
-      // NASA FIRMS API call for recent fire data
+      // Prefer direct browser call using user key
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${apiKey}/MODIS_NRT/world/1/${yesterday}`;
-      
-      console.log('→ Fetching live fire data from NASA FIRMS...');
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Accept': 'text/csv',
-          'User-Agent': 'Global-Forest-Explorer/1.0'
-        }
-      });
-      
-      if (!response.ok) {
-        if (response.status === 403) {
-          throw new Error('NASA FIRMS API key invalid or access denied');
-        } else if (response.status === 404) {
-          throw new Error('NASA FIRMS API endpoint not found');
-        } else if (response.status === 400) {
-          throw new Error('NASA FIRMS API bad request - check date format and parameters');
-        }
-        throw new Error(`NASA FIRMS API error: ${response.status} ${response.statusText}`);
+      const datasets = ['MODIS_NRT', 'VIIRS_SNPP_NRT', 'VIIRS_NOAA20_NRT'];
+      for (const dataset of datasets) {
+        const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${apiKey}/${dataset}/world/1/${yesterday}`;
+        console.log('→ Fetching live fire data from NASA FIRMS:', url);
+        const response = await fetch(url, { headers: { 'Accept': 'text/csv' } });
+        if (!response.ok) continue;
+        const csvData = await response.text();
+        const fireAlerts = this.parseFireCsvData(csvData);
+        return fireAlerts;
       }
-
-      const csvData = await response.text();
-      if (!csvData || csvData.trim().length === 0) {
-        console.log('NASA FIRMS returned empty data');
-        return [];
-      }
-      
-      const fireAlerts = this.parseFireCsvData(csvData);
-      return fireAlerts;
+      throw new Error('All FIRMS datasets returned no data');
     } catch (error) {
       throw error; // Re-throw to be handled by caller
     }
@@ -500,7 +491,7 @@ export class EnhancedForestDataService {
 
   private async getLiveBiodiversityData(): Promise<BiodiversityData[]> {
     try {
-      const species = [];
+      const species: BiodiversityData[] = [];
       const forestSpecies = [
         'Pongo abelii',
         'Panthera onca', 
@@ -569,7 +560,7 @@ export class EnhancedForestDataService {
   private async getLiveHistoricalData(region: string, startYear: number, endYear: number): Promise<any[]> {
     try {
       // This would integrate with multiple historical data sources
-      const data = [];
+      const data: any[] = [];
       
       for (let year = startYear; year <= endYear; year++) {
         // In a real implementation, this would fetch from Global Forest Watch historical API
