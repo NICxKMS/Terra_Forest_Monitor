@@ -89,9 +89,14 @@ export class ApiConfigManager {
   }
 
   public getConfiguredApis(): string[] {
-    return Object.entries(this.apiKeys)
-      .filter(([_, value]) => value && value.length > 0)
-      .map(([key, _]) => key);
+    const configured: string[] = [];
+    if (this.apiKeys.nasa_firms && this.apiKeys.nasa_firms.length > 0) configured.push('nasa_firms');
+    if (this.apiKeys.openweather && this.apiKeys.openweather.length > 0) configured.push('openweather');
+    if (
+      this.apiKeys.sentinel_hub_client_id && this.apiKeys.sentinel_hub_client_id.length > 0 &&
+      this.apiKeys.sentinel_hub_client_secret && this.apiKeys.sentinel_hub_client_secret.length > 0
+    ) configured.push('sentinel_hub');
+    return configured;
   }
 
   // Get API configuration with live keys
@@ -115,46 +120,57 @@ export class ApiConfigManager {
   }
 
   // Test if an API endpoint is reachable
-  public async testApiConnection(service: string): Promise<{ success: boolean; error?: string }> {
+  public async testApiConnection(service: string): Promise<{ success: boolean; error?: string; latencyMs?: number; endpoint?: string; statusCode?: number }> {
+    const baseUrl = (typeof window !== 'undefined' && (window as any).__FOREST_WORKER_BASE__) || (import.meta as any).env?.VITE_FOREST_WORKER_BASE || 'https://forest.nicx.me/api';
+    const start = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    let endpoint = '';
     try {
-      const baseUrl = (typeof window !== 'undefined' && (window as any).__FOREST_WORKER_BASE__) || (import.meta as any).env?.VITE_FOREST_WORKER_BASE || 'https://forest.nicx.me/api';
       switch (service) {
         case 'openweather': {
-          // Proxy through worker to avoid CORS
-          const response = await fetch(`${baseUrl}/weather?lat=51.5074&lng=-0.1278`);
+          endpoint = `${baseUrl}/weather?lat=51.5074&lng=-0.1278`;
+          const response = await fetch(endpoint);
           const body = await response.json().catch(() => ({}));
-          if (response.ok && body?.success) return { success: true };
-          return { success: false, error: `HTTP ${response.status}` };
+          const latencyMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+          if (response.ok && body?.success) return { success: true, latencyMs, endpoint, statusCode: response.status };
+          return { success: false, error: `HTTP ${response.status}`, latencyMs, endpoint, statusCode: response.status };
         }
-        
         case 'nasa_firms': {
-          const response = await fetch(`${baseUrl}/fire-alerts?region=world&days=1`);
+          endpoint = `${baseUrl}/fire-alerts?region=world&days=1`;
+          const response = await fetch(endpoint);
           const body = await response.json().catch(() => ({}));
-          if (response.ok && body?.success) return { success: true };
-          return { success: false, error: `HTTP ${response.status}` };
+          const latencyMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+          if (response.ok && body?.success) return { success: true, latencyMs, endpoint, statusCode: response.status };
+          return { success: false, error: `HTTP ${response.status}`, latencyMs, endpoint, statusCode: response.status };
         }
-        
         case 'nasa_gibs': {
-          const response = await fetch(`${baseUrl}/satellite-data?lat=0&lng=0`);
+          endpoint = `${baseUrl}/satellite-data?lat=0&lng=0`;
+          const response = await fetch(endpoint);
           const body = await response.json().catch(() => ({}));
-          if (response.ok && body?.success) return { success: true };
-          return { success: false, error: `HTTP ${response.status}` };
+          const latencyMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+          if (response.ok && body?.success) return { success: true, latencyMs, endpoint, statusCode: response.status };
+          return { success: false, error: `HTTP ${response.status}`, latencyMs, endpoint, statusCode: response.status };
         }
-        
         case 'global_forest_watch': {
-          const response = await fetch(`${baseUrl}/deforestation-alerts?region=BRA`);
+          endpoint = `${baseUrl}/deforestation-alerts?region=BRA`;
+          const response = await fetch(endpoint);
           const body = await response.json().catch(() => ({}));
-          if (response.ok && body?.success) return { success: true };
-          return { success: false, error: `HTTP ${response.status}` };
+          const latencyMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+          if (response.ok && body?.success) return { success: true, latencyMs, endpoint, statusCode: response.status };
+          return { success: false, error: `HTTP ${response.status}`, latencyMs, endpoint, statusCode: response.status };
         }
-        
         case 'gbif': {
-          const response = await fetch(`${baseUrl}/biodiversity?region=global&limit=1`);
+          endpoint = `${baseUrl}/biodiversity?region=global&limit=1`;
+          const response = await fetch(endpoint);
           const body = await response.json().catch(() => ({}));
-          if (response.ok && body?.success) return { success: true };
-          return { success: false, error: `HTTP ${response.status}` };
+          const latencyMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+          if (response.ok && body?.success) return { success: true, latencyMs, endpoint, statusCode: response.status };
+          return { success: false, error: `HTTP ${response.status}`, latencyMs, endpoint, statusCode: response.status };
         }
-        
+        case 'sentinel_hub': {
+          // No direct worker endpoint; report configuration only
+          const latencyMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+          return { success: this.hasApiKey('sentinel_hub_client_id') && this.hasApiKey('sentinel_hub_client_secret'), latencyMs, endpoint: 'Sentinel Hub (client-side config)', statusCode: 0 };
+        }
         default:
           return { success: false, error: 'Unknown service' };
       }
@@ -165,9 +181,12 @@ export class ApiConfigManager {
       } else if (errorMessage.includes('Failed to fetch')) {
         errorMessage = 'Network error or CORS restriction';
       }
+      const latencyMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
       return { 
         success: false, 
-        error: errorMessage
+        error: errorMessage,
+        latencyMs,
+        endpoint
       };
     }
   }
@@ -178,18 +197,18 @@ export class ApiConfigManager {
   }
 
   // Get status of all configured APIs
-  public async getApiStatuses(): Promise<Record<string, { connected: boolean; error?: string }>> {
+  public async getApiStatuses(): Promise<Record<string, { connected: boolean; error?: string; latencyMs?: number; endpoint?: string }>> {
     const services = ['openweather', 'nasa_firms', 'nasa_gibs', 'global_forest_watch', 'gbif'];
-    const statuses: Record<string, { connected: boolean; error?: string }> = {};
-    
+    const statuses: Record<string, { connected: boolean; error?: string; latencyMs?: number; endpoint?: string }> = {};
     for (const service of services) {
       const result = await this.testApiConnection(service);
       statuses[service] = {
         connected: result.success,
-        error: result.error
+        error: result.error,
+        latencyMs: result.latencyMs,
+        endpoint: result.endpoint
       };
     }
-    
     return statuses;
   }
 }

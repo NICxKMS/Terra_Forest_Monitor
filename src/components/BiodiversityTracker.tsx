@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from './ui/card';
-import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Search, Filter, Camera, MapPin, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { Search, Camera, MapPin, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { mockDataService } from '../services/mockDataService';
 import { enhancedForestDataService } from '../services/enhancedForestDataService';
@@ -97,9 +96,17 @@ export function BiodiversityTracker() {
       setLoading(true);
       try {
         const liveOnly = apiConfigManager.isNoMockEnabled();
-        const biodiversityData = liveOnly
-          ? await enhancedForestDataService.getBiodiversityData()
-          : mockDataService.getBiodiversityData();
+        let biodiversityData: any[] = [];
+        try {
+          biodiversityData = await enhancedForestDataService.getBiodiversityData();
+        } catch (e) {
+          if (liveOnly) throw e;
+          biodiversityData = mockDataService.getBiodiversityData();
+        }
+        // If live returned empty and no-mock is off, use mock to populate UI
+        if (!liveOnly && biodiversityData.length === 0) {
+          biodiversityData = mockDataService.getBiodiversityData();
+        }
         
         // Convert to component interface with images
         const convertedSpecies: Species[] = biodiversityData.map((speciesData, index) => ({
@@ -284,6 +291,9 @@ export function BiodiversityTracker() {
                   src={species.imageUrl}
                   alt={species.name}
                   className="w-16 h-16 rounded-lg object-cover"
+                  width={64}
+                  height={64}
+                  sizes="64px"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">

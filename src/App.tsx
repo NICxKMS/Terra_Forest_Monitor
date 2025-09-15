@@ -115,7 +115,9 @@ export default function App() {
     window.addEventListener('switchToTab', handleSwitchToTab as EventListener);
 
     return () => {
-      authSubscription && authSubscription.unsubscribe && authSubscription.unsubscribe();
+      if (authSubscription && authSubscription.unsubscribe) {
+        authSubscription.unsubscribe();
+      }
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('apiKeysRefreshed', handleApiKeysRefreshed as EventListener);
       window.removeEventListener('switchToTab', handleSwitchToTab as EventListener);
@@ -179,8 +181,7 @@ export default function App() {
   const checkApiStatus = async () => {
     try {
       const configuredApis = apiConfigManager.getConfiguredApis();
-      const totalApis = 6; // Total number of APIs we support
-      const connectedApis = configuredApis.length;
+      const totalApis = 6; // kept static for display
       
       // Test connections for configured APIs
       const statusDetails: Record<string, any> = {};
@@ -188,7 +189,7 @@ export default function App() {
         try {
           const result = await apiConfigManager.testApiConnection(api);
           statusDetails[api] = result;
-        } catch (error) {
+        } catch {
           statusDetails[api] = { success: false, error: 'Connection failed' };
         }
       }
@@ -204,7 +205,7 @@ export default function App() {
               // Count public APIs as connected if they work
               statusDetails[api].configured = true;
             }
-          } catch (error) {
+          } catch {
             statusDetails[api] = { success: false, error: 'Connection failed' };
           }
         }
@@ -285,7 +286,7 @@ export default function App() {
                   className="text-sm text-muted-foreground hover:text-foreground p-1"
                   onClick={() => setShowBrowserInfo(true)}
                 >
-                  Browser Mode • {apiStatus.connected}/${apiStatus.total} APIs Available • Mock Data
+                  {`Browser Mode • ${apiStatus.connected}/${apiStatus.total} APIs Available • ${apiConfigManager.isNoMockEnabled() ? 'Live only' : (apiStatus.connected > 0 ? 'Live+Mock' : 'Mock Data')}`}
                 </Button>
               </div>
               <Button 
@@ -349,7 +350,7 @@ export default function App() {
                 Advanced Forest Monitoring & Conservation
               </h2>
               <p className="text-muted-foreground text-lg mb-6">
-                Combining real-time satellite data, AI analytics, and interactive visualization to monitor and analyze the world's forests. Empowering conservationists with powerful tools for forest preservation.
+                Combining real-time satellite data, AI analytics, and interactive visualization to monitor and analyze the world&apos;s forests. Empowering conservationists with powerful tools for forest preservation.
               </p>
               <div className="flex items-center gap-4">
                 <Button size="lg" onClick={() => setActiveTab('monitoring')}>
@@ -366,9 +367,23 @@ export default function App() {
               <Card className="p-6 bg-card/50 backdrop-blur-sm">
                 <div className="aspect-video relative rounded-lg overflow-hidden">
                   <ImageWithFallback
-                    src="https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
+                    src="https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=1280&utm_source=figma&utm_medium=referral"
                     alt="Global forest monitoring from space"
                     className="w-full h-full object-cover"
+                    crossOrigin="anonymous"
+                    srcSet={
+                      [
+                        'https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=640&utm_source=figma&utm_medium=referral 640w',
+                        'https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=828&utm_source=figma&utm_medium=referral 828w',
+                        'https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=1080&utm_source=figma&utm_medium=referral 1080w',
+                        'https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=1280&utm_source=figma&utm_medium=referral 1280w',
+                        'https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=1920&utm_source=figma&utm_medium=referral 1920w'
+                      ].join(', ')
+                    }
+                    priority
+                    sizes="(min-width: 1024px) 800px, 100vw"
+                    width={1280}
+                    height={720}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                   <div className="absolute bottom-4 left-4 text-white">

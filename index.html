@@ -5,6 +5,47 @@
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>Global Forest Explorer</title>
+      <link rel="preconnect" href="https://images.unsplash.com" crossorigin>
+      <link rel="dns-prefetch" href="//images.unsplash.com">
+      <link
+        rel="preload"
+        as="image"
+        type="image/jpeg"
+        crossorigin
+        media="(max-width: 1023px)"
+        href="https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=640&utm_source=figma&utm_medium=referral"
+        imagesizes="100vw"
+        imagesrcset="
+          https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=320&utm_source=figma&utm_medium=referral 320w,
+          https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=480&utm_source=figma&utm_medium=referral 480w,
+          https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=640&utm_source=figma&utm_medium=referral 640w,
+          https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=828&utm_source=figma&utm_medium=referral 828w
+        "
+      />
+      <link
+        rel="preload"
+        as="image"
+        type="image/jpeg"
+        crossorigin
+        media="(min-width: 1024px)"
+        href="https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=1280&utm_source=figma&utm_medium=referral"
+        imagesizes="(min-width: 1024px) 800px, 100vw"
+        imagesrcset="
+          https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=640&utm_source=figma&utm_medium=referral 640w,
+          https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=828&utm_source=figma&utm_medium=referral 828w,
+          https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=1080&utm_source=figma&utm_medium=referral 1080w,
+          https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=1280&utm_source=figma&utm_medium=referral 1280w,
+          https://images.unsplash.com/photo-1639461426283-1ef93a8327c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYXRlbGxpdGUlMjBlYXJ0aCUyMGZvcmVzdCUyMG1vbml0b3Jpbmd8ZW58MXx8fHwxNzU3MjAyNjI0fDA&ixlib=rb-4.1.0&q=75&w=1920&utm_source=figma&utm_medium=referral 1920w
+        "
+      />
+      <link rel="preconnect" href="https://a.tile.openstreetmap.org">
+      <link rel="preconnect" href="https://b.tile.openstreetmap.org">
+      <link rel="preconnect" href="https://c.tile.openstreetmap.org">
+      <link rel="dns-prefetch" href="//a.tile.openstreetmap.org">
+      <link rel="dns-prefetch" href="//b.tile.openstreetmap.org">
+      <link rel="dns-prefetch" href="//c.tile.openstreetmap.org">
+      <link rel="preconnect" href="https://server.arcgisonline.com">
+      <link rel="dns-prefetch" href="//server.arcgisonline.com">
     </head>
 
     <body>

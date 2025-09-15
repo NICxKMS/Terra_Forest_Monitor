@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card } from './ui/card';
+// import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
@@ -21,7 +21,7 @@ import {
   AlertCircle,
   Wifi,
   WifiOff,
-  ExternalLink
+  // ExternalLink
 } from 'lucide-react';
 import { apiConfigManager } from '../services/apiConfigManager';
 import { toast } from 'sonner';
@@ -58,13 +58,16 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [apiStatuses, setApiStatuses] = useState<Record<string, any>>({});
   const [isRefreshingApis, setIsRefreshingApis] = useState(false);
   const [noMock, setNoMock] = useState<boolean>(false);
+  const [retesting, setRetesting] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (isOpen) {
       loadApiStatuses();
       try {
         setNoMock(apiConfigManager.isNoMockEnabled());
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
   }, [isOpen]);
 
@@ -138,6 +141,26 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       toast.error('Failed to load API statuses');
     } finally {
       setIsRefreshingApis(false);
+    }
+  };
+
+  const retestService = async (service: string) => {
+    try {
+      setRetesting(prev => ({ ...prev, [service]: true }));
+      const result = await apiConfigManager.testApiConnection(service);
+      setApiStatuses(prev => ({
+        ...prev,
+        [service]: {
+          ...prev[service],
+          ...result,
+          lastTested: new Date().toISOString(),
+          configured: prev[service]?.configured
+        }
+      }));
+    } catch (error) {
+      // noop
+    } finally {
+      setRetesting(prev => ({ ...prev, [service]: false }));
     }
   };
 
@@ -435,41 +458,52 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                           const requiresKey = ['openweather', 'nasa_firms', 'sentinel_hub'].includes(service);
                           
                           return (
-                            <div key={service} className="flex items-center justify-between p-2 bg-background/50 rounded">
-                              <div className="flex items-center gap-2">
+                            <div key={service} className="flex items-start justify-between p-2 bg-background/50 rounded">
+                              <div className="flex items-start gap-3">
                                 {status.success ? (
-                                  <Wifi className="w-4 h-4 text-green-500" />
+                                  <Wifi className="w-4 h-4 text-green-500 mt-1" />
                                 ) : (
-                                  <WifiOff className="w-4 h-4 text-red-500" />
+                                  <WifiOff className="w-4 h-4 text-red-500 mt-1" />
                                 )}
                                 <div>
-                                  <span className="text-sm font-medium">{serviceNames[service]}</span>
-                                  {requiresKey && !status.configured && (
-                                    <p className="text-xs text-muted-foreground">API key required</p>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">{serviceNames[service]}</span>
+                                    {requiresKey && (
+                                      <Badge variant={status.configured ? "default" : "secondary"} className="text-xs">
+                                        {status.configured ? 'Configured' : 'No Key'}
+                                      </Badge>
+                                    )}
+                                    <Badge 
+                                      variant={status.success ? "default" : "destructive"} 
+                                      className="gap-1 text-xs"
+                                    >
+                                      {status.success ? 'Online' : 'Offline'}
+                                    </Badge>
+                                  </div>
+                                  {status.endpoint && (
+                                    <p className="text-xs text-muted-foreground mt-1 truncate max-w-[320px]">{status.endpoint}</p>
                                   )}
+                                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                                    {typeof status.latencyMs === 'number' && (
+                                      <span>Latency: {Math.round(status.latencyMs)}ms</span>
+                                    )}
+                                    {status.statusCode ? (
+                                      <span>HTTP: {status.statusCode}</span>
+                                    ) : null}
+                                    {status.lastTested && (
+                                      <span>Tested: {new Date(status.lastTested).toLocaleTimeString()}</span>
+                                    )}
+                                  </div>
                                   {status.error && (
-                                    <p className="text-xs text-red-500">{status.error}</p>
+                                    <p className="text-xs text-red-500 mt-1">{status.error}</p>
                                   )}
                                 </div>
                               </div>
-                              
                               <div className="flex items-center gap-2">
-                                {requiresKey && (
-                                  <Badge variant={status.configured ? "default" : "secondary"} className="text-xs">
-                                    {status.configured ? 'Configured' : 'No Key'}
-                                  </Badge>
-                                )}
-                                <Badge 
-                                  variant={status.success ? "default" : "destructive"} 
-                                  className="gap-1 text-xs"
-                                >
-                                  {status.success ? (
-                                    <CheckCircle className="w-3 h-3" />
-                                  ) : (
-                                    <AlertCircle className="w-3 h-3" />
-                                  )}
-                                  {status.success ? 'Online' : 'Offline'}
-                                </Badge>
+                                <Button variant="outline" size="sm" onClick={() => retestService(service)} disabled={!!retesting[service]}>
+                                  <RefreshCw className={`w-3 h-3 mr-1 ${retesting[service] ? 'animate-spin' : ''}`} />
+                                  Retest
+                                </Button>
                               </div>
                             </div>
                           );

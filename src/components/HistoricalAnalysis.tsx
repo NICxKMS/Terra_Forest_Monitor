@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Slider } from './ui/slider';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Bar } from 'recharts';
-import { Calendar, Download, Play, Pause, RotateCcw, TrendingDown, TrendingUp } from 'lucide-react';
+import { Download, Play, Pause, RotateCcw, TrendingDown, TrendingUp } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface HistoricalData {
@@ -245,6 +245,9 @@ export function HistoricalAnalysis() {
               src="https://images.unsplash.com/photo-1729534988762-a6f62ef9ed8b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmb3Jlc3QlMjBjYW5vcHklMjBhZXJpYWwlMjB2aWV3fGVufDF8fHx8MTc1NzIwMjYyNnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
               alt="Historical satellite view"
               className="w-full h-full object-cover"
+              sizes="(min-width: 1024px) 600px, 100vw"
+              width={1024}
+              height={256}
             />
             <div className="absolute top-4 left-4">
               <Badge variant="secondary">{playbackYear} Satellite Data</Badge>

@@ -218,7 +218,9 @@ async function handleBiodiversity(url: URL): Promise<Response> {
         const j = await r.json();
         if (j.results && j.results.length > 0) results.push(parseGBIFSpeciesData(j.results[0]));
       }
-    } catch {}
+    } catch {
+      // ignore
+    }
   }
   while (results.length < Math.min(limit, speciesQueries.length)) {
     if (url.searchParams.get('no_mock') === '1') break;

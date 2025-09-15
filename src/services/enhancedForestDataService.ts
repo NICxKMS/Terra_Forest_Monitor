@@ -141,12 +141,6 @@ export class EnhancedForestDataService {
       console.log('ℹ️ Server-side API not available, using enhanced browser service');
     }
 
-    // Fallback to browser-based service
-    if (!this.shouldUseLiveData()) {
-      console.log('Using mock data for forest regions (no API keys configured)');
-      return mockDataService.getForestRegions();
-    }
-
     const cacheKey = 'forest_regions_live';
     const cached = this.getCachedData(cacheKey);
     if (cached) return cached;
@@ -254,7 +248,7 @@ export class EnhancedForestDataService {
       }
 
       // Always add some biodiversity alerts from mock data for demonstration
-      if (!apiConfigManager.isNoMockEnabled()) {
+      if (!apiConfigManager.isNoMockEnabled() && alerts.length === 0) {
         const biodiversityAlerts = this.getMockBiodiversityAlerts();
         alerts.push(...biodiversityAlerts);
       }
@@ -279,15 +273,6 @@ export class EnhancedForestDataService {
 
   // Get biodiversity data from GBIF
   public async getBiodiversityData(): Promise<BiodiversityData[]> {
-    if (!this.shouldUseLiveData()) {
-      if (apiConfigManager.isNoMockEnabled()) {
-        console.log('No live biodiversity keys and no-mock enabled – returning empty');
-        return [];
-      }
-      console.log('Using mock data for biodiversity (no API keys configured)');
-      return mockDataService.getBiodiversityData();
-    }
-
     const cacheKey = 'biodiversity_live';
     const cached = this.getCachedData(cacheKey);
     if (cached) return cached;
@@ -369,12 +354,6 @@ export class EnhancedForestDataService {
 
   // Get historical forest data
   public async getHistoricalData(region: string, startYear: number, endYear: number): Promise<any[]> {
-    if (!this.shouldUseLiveData()) {
-      console.log('Using mock historical data (no API keys configured)');
-      const years = Math.max(0, endYear - startYear);
-      return mockDataService.getHistoricalData(region, years);
-    }
-
     const cacheKey = `historical_live_${region}_${startYear}_${endYear}`;
     const cached = this.getCachedData(cacheKey);
     if (cached) return cached;

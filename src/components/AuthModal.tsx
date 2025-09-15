@@ -8,7 +8,6 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { LogIn, UserPlus, Building, Mail, Lock, User } from 'lucide-react';
 import { getSupabase } from '../utils/supabase/client';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
 
 interface AuthModalProps {
   onAuth: (user: any) => void;

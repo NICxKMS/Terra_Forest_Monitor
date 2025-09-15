@@ -109,9 +109,14 @@ export function RealTimeMonitoring() {
     const fetchAlerts = async () => {
       try {
         const liveOnly = apiConfigManager.isNoMockEnabled();
-        const alertsData = liveOnly
-          ? await enhancedForestDataService.getForestAlerts()
-          : mockDataService.getForestAlerts();
+        // Always try live first
+        let alertsData: any[] = [];
+        try {
+          alertsData = await enhancedForestDataService.getForestAlerts();
+        } catch (e) {
+          if (liveOnly) throw e;
+          alertsData = mockDataService.getForestAlerts();
+        }
         
         // Transform alerts to match component interface
         const transformedAlerts: AlertData[] = alertsData.map(alert => ({
@@ -136,10 +141,11 @@ export function RealTimeMonitoring() {
     const fetchSatelliteData = async () => {
       try {
         const liveOnly = apiConfigManager.isNoMockEnabled();
-        if (liveOnly) {
+        try {
           const currentData = await serverSideDataService.getSatelliteData(0, 0);
           setSatelliteData({ feeds: [], realTimeData: [], currentData });
-        } else {
+        } catch (e) {
+          if (liveOnly) throw e;
           const satelliteDataResponse = mockDataService.getSatelliteData();
           setSatelliteData({ 
             feeds: satelliteFeeds, 
