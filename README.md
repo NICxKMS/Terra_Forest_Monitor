@@ -1,7 +1,7 @@
 
   # Global Forest Explorer
 
-  This is a code bundle for Global Forest Explorer. The original project is available at https://www.figma.com/design/5iPaYC2ZCr1OTp2adfyUl5/Global-Forest-Explorer.
+  This is a code bundle for Global Forest Explorer. The original project is avaliable live at https://forest.nicx.me .
 
   ## Running the code
 
